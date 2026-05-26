@@ -55,90 +55,288 @@
   <button id="startBtn">Start Microphone</button>
   <div id="status">waiting...</div>
 
-  <script>
+  // ── Constants ─────────────────────────────────────────────────────────────
+const NUM_BANDS   = 16;      // how many frequency bands to split into
+const MIN_FREQ    = 80;      // Hz — bottom of vocal range
+const MAX_FREQ    = 8000;    // Hz — top of vocal range
+const CARRIER_HZ  = 120;     // default pitch of the synth (we'll control this with hand later)
 
-    // References to HTML elements
-    const canvas   = document.getElementById('waveform');
-    const ctx      = canvas.getContext('2d');   // the canvas drawing tool
-    const startBtn = document.getElementById('startBtn');
-    const status   = document.getElementById('status');
+// ── HTML element refs ──────────────────────────────────────────────────────
+const canvas   = document.getElementById('waveform');
+const ctx      = canvas.getContext('2d');
+const startBtn = document.getElementById('startBtn');
+const status   = document.getElementById('status');
 
-    // FILLED ON START
-    let audioContext = null;
-    let analyser     = null;
-    let dataArray    = null;
+// ── State ──────────────────────────────────────────────────────────────────
+let audioContext = null;
+let analyser     = null;
+let dataArray    = null;
+let mode         = 'robot';   // 'robot' or 'choir'
 
-    // ON START
-    startBtn.addEventListener('click', async () => {
+// These will hold the vocoder's working parts once built
+let modulatorFilters = [];   // filters that split YOUR VOICE into bands
+let carrierFilters   = [];   // matching filters on the oscillator side
+let envelopes        = [];   // gain nodes that measure + transfer loudness
+let carrierGains     = [];   // gain nodes that apply that loudness to carrier
+let oscillators      = [];   // the actual synth tones
 
-      // AudioContext must be created after a user gesture (browser rule)
-      audioContext = new AudioContext();
+// ── Build frequency band edges (logarithmic scale, like human hearing) ─────
+// Logarithmic means the bands get wider at higher frequencies,
+// which matches how ears actually perceive sound.
+function getBandFrequencies() {
+  const bands = [];
+  for (let i = 0; i < NUM_BANDS; i++) {
+    const low  = MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, i / NUM_BANDS);
+    const high = MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, (i + 1) / NUM_BANDS);
+    const center = Math.sqrt(low * high);   // geometric midpoint of the band
+    bands.push({ low, high, center });
+  }
+  return bands;
+}
 
-      // Ask the browser for microphone access
-      // This returns a Promise — the 'await' pauses until the mic is ready
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+// ── Create the oscillator bank (different for robot vs choir) ─────────────
+function createOscillators(frequency) {
+  // Disconnect and stop any existing oscillators first
+  oscillators.forEach(o => { try { o.stop(); } catch(e) {} });
+  oscillators = [];
 
-      // Wrap the mic stream as an audio node so we can connect things to it
-      const micNode = audioContext.createMediaStreamSource(stream);
+  if (mode === 'robot') {
+    // One sawtooth wave — harsh, buzzy, classic robot
+    const osc = audioContext.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    osc.start();
+    oscillators.push(osc);
 
-      // An AnalyserNode lets us read the waveform data without modifying audio
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048; // how many samples to look at (more = more detail)
+  } else {
+    // Choir: four oscillators, slightly detuned from each other
+    // Detune is measured in "cents" — 100 cents = 1 semitone
+    const detuneAmounts = [-15, -5, 5, 15];
 
-      // Connect: mic → analyser  (we do NOT connect analyser → speakers yet)
-      micNode.connect(analyser);
-
-      // Create a buffer (a plain array) the analyser will write data into
-      dataArray = new Uint8Array(analyser.fftSize);
-
-      status.textContent = 'mic active — speak and watch the wave';
-      startBtn.disabled = true;
-
-      // Start the animation loop
-      drawWaveform();
-
+    detuneAmounts.forEach(detuneCents => {
+      const osc = audioContext.createOscillator();
+      osc.type = 'sine';   // sine = smooth, pure tone (warmer than sawtooth)
+      osc.frequency.setValueAtTime(frequency, audioContext.currentTime);
+      osc.detune.setValueAtTime(detuneCents, audioContext.currentTime);
+      osc.start();
+      oscillators.push(osc);
     });
+  }
 
-    // DRAWING LOOP (60 PER SECOND)
-    function drawWaveform() {
+  return oscillators;
+}
 
-      // Schedule this function to run again on the next animation frame
-      requestAnimationFrame(drawWaveform);
+// ── Build the full vocoder graph ───────────────────────────────────────────
+function buildVocoder(micNode, frequency) {
 
-      // Ask the analyser to fill dataArray with the current waveform
-      // Values are 0-255, where 128 = silence (the midpoint)
-      analyser.getByteTimeDomainData(dataArray);
+  const bands = getBandFrequencies();
 
-      // Clear the canvas
-      ctx.fillStyle = '#0f0f1a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // A merger node collects all the band outputs into one stereo stream
+  const outputMerger = audioContext.createGain();
+  outputMerger.gain.value = 0.7;   // master volume — pull down to avoid clipping
 
-      // Draw the waveform line
-      ctx.lineWidth   = 2;
-      ctx.strokeStyle = '#5555ff';
-      ctx.beginPath();
+  const oscs = createOscillators(frequency);
 
-      const sliceWidth = canvas.width / dataArray.length;
-      let x = 0;
+  modulatorFilters = [];
+  carrierFilters   = [];
+  envelopes        = [];
+  carrierGains     = [];
 
-      for (let i = 0; i < dataArray.length; i++) {
-        // Convert the 0–255 value to a y position on the canvas
-        const v = dataArray[i] / 128.0;   // 1.0 = silence
-        const y = (v * canvas.height) / 2;
+  bands.forEach((band, i) => {
 
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+    // ── MODULATOR SIDE (your voice) ───────────────────────────────────────
+    // A bandpass filter lets only a slice of frequencies through
+    const modFilter = audioContext.createBiquadFilter();
+    modFilter.type            = 'bandpass';
+    modFilter.frequency.value = band.center;
+    modFilter.Q.value         = 2;   // Q controls bandwidth — higher = narrower band
 
-        x += sliceWidth;
-      }
+    // An envelope follower: a lowpass filter on the *absolute value* of the signal.
+    // Trick: we use a WaveShaper to get absolute value, then a lowpass to smooth it.
+    // This gives us "how loud is this band right now" as a continuous value.
+    const rectifier = audioContext.createWaveShaper();
+    rectifier.curve = makeRectifierCurve();   // see function below
 
-      ctx.lineTo(canvas.width, canvas.height / 2);
-      ctx.stroke();
+    const envFilter = audioContext.createBiquadFilter();
+    envFilter.type            = 'lowpass';
+    envFilter.frequency.value = 10;   // 10Hz smoothing — slow enough to track envelope
+
+    // Connect: mic → modulator band filter → rectifier → envelope smoother
+    micNode.connect(modFilter);
+    modFilter.connect(rectifier);
+    rectifier.connect(envFilter);
+
+    // ── CARRIER SIDE (the oscillator) ─────────────────────────────────────
+    // Matching bandpass filter for the carrier
+    const carFilter = audioContext.createBiquadFilter();
+    carFilter.type            = 'bandpass';
+    carFilter.frequency.value = band.center;
+    carFilter.Q.value         = 2;
+
+    // A gain node whose value will be set by the envelope
+    // This is the "puppet" — the envelope above controls its volume
+    const carrierGain = audioContext.createGain();
+    carrierGain.gain.value = 0;   // starts silent
+
+    // Connect each oscillator through the carrier filter and gain
+    oscs.forEach(osc => osc.connect(carFilter));
+    carFilter.connect(carrierGain);
+    carrierGain.connect(outputMerger);
+
+    // Store references so we can update them in the animation loop
+    modulatorFilters.push(modFilter);
+    carrierFilters.push(carFilter);
+    envelopes.push(envFilter);
+    carrierGains.push(carrierGain);
+  });
+
+  // Connect the merged output to speakers
+  outputMerger.connect(audioContext.destination);
+
+  return outputMerger;
+}
+
+// ── WaveShaper curve for full-wave rectification ───────────────────────────
+// This converts the audio signal to its absolute value (all positive).
+// A WaveShaper maps input sample values (-1 to 1) to output values via a lookup table.
+// We want: negative values → flipped positive. So f(x) = |x|
+function makeRectifierCurve() {
+  const n     = 256;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x  = (i * 2) / n - 1;   // maps i to range -1 → +1
+    curve[i] = Math.abs(x);        // absolute value
+  }
+  return curve;
+}
+
+// ── Envelope update loop — runs every animation frame ─────────────────────
+// This is the core of the vocoder: reading each band's loudness and
+// applying it to the matching carrier band's volume.
+let envelopeBuffers = [];   // one AnalyserNode per band for reading levels
+
+function setupEnvelopeReaders() {
+  envelopeBuffers = envelopes.map(envNode => {
+    const reader = audioContext.createAnalyser();
+    reader.fftSize = 256;
+    envNode.connect(reader);
+    return { reader, buffer: new Float32Array(reader.fftSize) };
+  });
+}
+
+function updateEnvelopes() {
+  envelopeBuffers.forEach(({ reader, buffer }, i) => {
+    reader.getFloatTimeDomainData(buffer);
+
+    // RMS (root mean square) = a good measure of perceived loudness
+    let sum = 0;
+    for (let s = 0; s < buffer.length; s++) {
+      sum += buffer[s] * buffer[s];
     }
+    const rms = Math.sqrt(sum / buffer.length);
 
-  </script>
+    // Apply to the carrier gain, scaled up so it's audible
+    // Clamp to 1.0 max so we don't clip
+    carrierGains[i].gain.setTargetAtTime(
+      Math.min(rms * 12, 1.0),
+      audioContext.currentTime,
+      0.01   // time constant — how fast the gain responds
+    );
+  });
+}
+
+// ── Update carrier pitch ───────────────────────────────────────────────────
+function setCarrierPitch(hz) {
+  oscillators.forEach((osc, i) => {
+    osc.frequency.setTargetAtTime(hz, audioContext.currentTime, 0.05);
+  });
+}
+
+// ── Start button ───────────────────────────────────────────────────────────
+startBtn.addEventListener('click', async () => {
+
+  audioContext = new AudioContext();
+
+  const stream  = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const micNode = audioContext.createMediaStreamSource(stream);
+
+  // Waveform analyser (same as phase 1)
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 2048;
+  micNode.connect(analyser);
+  dataArray = new Uint8Array(analyser.fftSize);
+
+  // Build the vocoder
+  buildVocoder(micNode, CARRIER_HZ);
+  setupEnvelopeReaders();
+
+  status.textContent = 'vocoder active — speak into the mic';
+  startBtn.disabled = true;
+
+  // Add mode toggle buttons now that we're running
+  addModeButtons();
+
+  drawLoop();
+});
+
+// ── Add robot / choir toggle buttons ──────────────────────────────────────
+function addModeButtons() {
+  const container = document.createElement('div');
+  container.style.cssText = 'display:flex; gap:12px; margin-top:16px;';
+
+  ['robot', 'choir'].forEach(m => {
+    const btn = document.createElement('button');
+    btn.textContent = m;
+    btn.style.opacity = m === mode ? '1' : '0.4';
+    btn.addEventListener('click', () => {
+      mode = m;
+      // Rebuild the oscillator bank with the new mode
+      buildVocoder(
+        audioContext.createMediaStreamSource(
+          analyser.context.destination   // reuse existing stream
+        ),
+        CARRIER_HZ
+      );
+      // Update button appearance
+      container.querySelectorAll('button').forEach(b => {
+        b.style.opacity = b.textContent === mode ? '1' : '0.4';
+      });
+    });
+    container.appendChild(btn);
+  });
+
+  document.body.appendChild(container);
+}
+
+// ── Main draw + update loop ────────────────────────────────────────────────
+function drawLoop() {
+  requestAnimationFrame(drawLoop);
+
+  // Update vocoder envelopes every frame
+  if (envelopeBuffers.length > 0) updateEnvelopes();
+
+  // Draw waveform (same as phase 1)
+  analyser.getByteTimeDomainData(dataArray);
+
+  ctx.fillStyle = '#0f0f1a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.lineWidth   = 2;
+  ctx.strokeStyle = mode === 'robot' ? '#5555ff' : '#55aaff';
+  ctx.beginPath();
+
+  const sliceWidth = canvas.width / dataArray.length;
+  let x = 0;
+
+  for (let i = 0; i < dataArray.length; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = (v * canvas.height) / 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    x += sliceWidth;
+  }
+
+  ctx.lineTo(canvas.width, canvas.height / 2);
+  ctx.stroke();
+}
 </body>
 </html>
