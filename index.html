@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <title>Gesture Vocoder</title>
   <style>
+    * { box-sizing: border-box; }
+
     body {
       background: #0a0a0f;
       color: #e0e0ff;
@@ -16,9 +18,13 @@
     }
 
     h1 { font-size: 1.2rem; letter-spacing: 0.2em; margin-bottom: 8px; }
-    p  { color: #666; font-size: 0.8rem; margin-bottom: 24px; }
 
-    /* Wrapper so the two canvases stack on top of each other */
+    #subtitle {
+      color: #666;
+      font-size: 0.8rem;
+      margin-bottom: 24px;
+    }
+
     #display-area {
       position: relative;
       width: 640px;
@@ -26,27 +32,20 @@
       margin-bottom: 16px;
     }
 
-    /* Waveform sits behind */
-    #waveform {
+    #waveform, #handCanvas {
       position: absolute;
       top: 0; left: 0;
+      border-radius: 8px;
+    }
+
+    #waveform {
       background: #0f0f1a;
       border: 1px solid #222244;
-      border-radius: 8px;
     }
 
-    /* Hand canvas sits on top, transparent background */
-    #handCanvas {
-      position: absolute;
-      top: 0; left: 0;
-      border-radius: 8px;
-      pointer-events: none;   /* clicks pass through to whatever is below */
-    }
+    #handCanvas { pointer-events: none; }
 
-    /* The webcam video — hidden, just used as input to MediaPipe */
-    #video {
-      display: none;
-    }
+    #video { display: none; }
 
     button {
       margin-top: 24px;
@@ -68,91 +67,160 @@
       color: #444466;
     }
 
-    /* Gesture info panel */
-    #gesturePanel {
+    /* ── Performance panel ── */
+    #perfPanel {
+      display: none;
       margin-top: 20px;
-      padding: 16px 24px;
+      width: 640px;
+    }
+
+    /* Big mode display */
+    #modeDisplay {
+      text-align: center;
+      font-size: 2rem;
+      letter-spacing: 0.2em;
+      color: #8888ff;
+      margin-bottom: 16px;
+      min-height: 2.5rem;
+      transition: color 0.2s;
+    }
+
+    #modeDisplay.bypass { color: #333355; }
+    #modeDisplay.choir  { color: #55aaff; }
+    #modeDisplay.robot  { color: #8888ff; }
+
+    /* Scale + note row */
+    #infoRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
       background: #0f0f1a;
       border: 1px solid #222244;
       border-radius: 8px;
-      width: 640px;
-      box-sizing: border-box;
-      display: none;   /* hidden until hand tracking starts */
+      margin-bottom: 12px;
     }
 
-    #gesturePanel h2 {
+    #scaleLabel {
       font-size: 0.75rem;
-      letter-spacing: 0.15em;
-      color: #444466;
-      margin: 0 0 12px 0;
+      color: #555577;
     }
 
-    .finger-row {
+    #noteDisplay {
+      font-size: 1.4rem;
+      color: #aaaaff;
+      letter-spacing: 0.1em;
+    }
+
+    #pitchHz {
+      font-size: 0.75rem;
+      color: #555577;
+    }
+
+    /* Finger indicators */
+    #fingerRow {
       display: flex;
-      gap: 12px;
-      margin-bottom: 10px;
+      gap: 8px;
+      margin-bottom: 12px;
     }
 
-    .finger-indicator {
-      padding: 6px 14px;
+    .fi {
+      flex: 1;
+      padding: 8px 0;
+      text-align: center;
       border-radius: 4px;
-      font-size: 0.75rem;
-      background: #1a1a2a;
+      font-size: 0.7rem;
+      background: #0f0f1a;
       color: #333355;
-      border: 1px solid #222233;
+      border: 1px solid #1a1a2a;
       transition: all 0.1s;
     }
 
-    .finger-indicator.up {
+    .fi.up {
       background: #1a1a4a;
       color: #8888ff;
       border-color: #333399;
     }
 
-    #scaleDisplay {
-      font-size: 0.9rem;
-      color: #aaaaff;
-      margin-top: 8px;
+    /* Pitch bar */
+    #pitchBarWrap {
+      background: #0f0f1a;
+      border: 1px solid #222244;
+      border-radius: 8px;
+      height: 12px;
+      overflow: hidden;
     }
 
-    #pitchDisplay {
-      font-size: 0.75rem;
-      color: #666688;
-      margin-top: 4px;
+    #pitchBar {
+      height: 100%;
+      width: 0%;
+      background: #5555ff;
+      border-radius: 8px;
+      transition: width 0.05s, background 0.2s;
     }
+
+    /* Gesture reference */
+    #gestureRef {
+      margin-top: 16px;
+      padding: 14px 20px;
+      background: #0a0a12;
+      border: 1px solid #1a1a2a;
+      border-radius: 8px;
+      font-size: 0.7rem;
+      color: #333355;
+      line-height: 2;
+    }
+
+    #gestureRef span { color: #555577; }
   </style>
 </head>
 <body>
 
   <h1>GESTURE VOCODER</h1>
-  <p>phase 3 — hand tracking</p>
+  <div id="subtitle">phase 4 — performance</div>
 
   <div id="display-area">
     <canvas id="waveform" width="640" height="200"></canvas>
     <canvas id="handCanvas" width="640" height="200"></canvas>
   </div>
 
-  <!-- Hidden video element — webcam feed goes here -->
   <video id="video" width="640" height="480" autoplay playsinline></video>
 
   <button id="startBtn">Start</button>
   <div id="status">waiting...</div>
 
-  <!-- Gesture info panel -->
-  <div id="gesturePanel">
-    <h2>GESTURE STATE</h2>
-    <div class="finger-row">
-      <div class="finger-indicator" id="fi-thumb">thumb</div>
-      <div class="finger-indicator" id="fi-index">index</div>
-      <div class="finger-indicator" id="fi-middle">middle</div>
-      <div class="finger-indicator" id="fi-ring">ring</div>
-      <div class="finger-indicator" id="fi-pinky">pinky</div>
+  <!-- Performance panel (hidden until started) -->
+  <div id="perfPanel">
+
+    <div id="modeDisplay">—</div>
+
+    <div id="infoRow">
+      <div id="scaleLabel">scale: —</div>
+      <div id="noteDisplay">—</div>
+      <div id="pitchHz">— hz</div>
     </div>
-    <div id="scaleDisplay">scale: —</div>
-    <div id="pitchDisplay">hand height: —</div>
+
+    <div id="fingerRow">
+      <div class="fi" id="fi-thumb">thumb</div>
+      <div class="fi" id="fi-index">index</div>
+      <div class="fi" id="fi-middle">middle</div>
+      <div class="fi" id="fi-ring">ring</div>
+      <div class="fi" id="fi-pinky">pinky</div>
+    </div>
+
+    <div id="pitchBarWrap"><div id="pitchBar"></div></div>
+
+    <div id="gestureRef">
+      <span>✋ all fingers</span> → major scale (robot) &nbsp;|&nbsp;
+      <span>🤙 thumb + pinky</span> → minor scale (choir)<br>
+      <span>☝️ index only</span> → pentatonic (robot) &nbsp;|&nbsp;
+      <span>✌️ index + middle</span> → chromatic (choir)<br>
+      <span>✊ fist</span> → silence &nbsp;|&nbsp;
+      <span>↕️ hand height</span> → pitch
+    </div>
+
   </div>
 
-  <!-- MediaPipe Hands from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -160,257 +228,107 @@
   <script>
 
     // ── Element refs ───────────────────────────────────────────────────────
-    const waveCanvas   = document.getElementById('waveform');
-    const waveCtx      = waveCanvas.getContext('2d');
-    const handCanvas   = document.getElementById('handCanvas');
-    const handCtx      = handCanvas.getContext('2d');
-    const video        = document.getElementById('video');
-    const startBtn     = document.getElementById('startBtn');
-    const statusEl     = document.getElementById('status');
-    const gesturePanel = document.getElementById('gesturePanel');
+    const waveCanvas  = document.getElementById('waveform');
+    const waveCtx     = waveCanvas.getContext('2d');
+    const handCanvas  = document.getElementById('handCanvas');
+    const handCtx     = handCanvas.getContext('2d');
+    const video       = document.getElementById('video');
+    const startBtn    = document.getElementById('startBtn');
+    const statusEl    = document.getElementById('status');
+    const perfPanel   = document.getElementById('perfPanel');
+    const modeDisplay = document.getElementById('modeDisplay');
+    const scaleLabel  = document.getElementById('scaleLabel');
+    const noteDisplay = document.getElementById('noteDisplay');
+    const pitchHzEl   = document.getElementById('pitchHz');
+    const pitchBar    = document.getElementById('pitchBar');
 
-    const fingerIndicators = {
-      thumb:  document.getElementById('fi-thumb'),
-      index:  document.getElementById('fi-index'),
-      middle: document.getElementById('fi-middle'),
-      ring:   document.getElementById('fi-ring'),
-      pinky:  document.getElementById('fi-pinky'),
+    // ── Music theory data ──────────────────────────────────────────────────
+    // Scales defined as semitone intervals from the root note
+    // We'll use these to snap hand height to musical pitches
+    const SCALES = {
+      major:      [0, 2, 4, 5, 7, 9, 11],
+      minor:      [0, 2, 3, 5, 7, 8, 10],
+      pentatonic: [0, 2, 4, 7, 9],
+      chromatic:  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      bypass:     null,
     };
 
-    // ── Vocoder state (same as phase 2) ───────────────────────────────────
+    // Note names for display
+    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+    // Root note: C3 = MIDI note 48 = ~130.8 Hz
+    // We'll span 2 octaves upward from here
+    const ROOT_MIDI   = 48;
+    const NUM_OCTAVES = 2;
+
+    // Convert a MIDI note number to frequency in Hz
+    // Formula: 440 * 2^((midi - 69) / 12)
+    // (A4 = MIDI 69 = 440 Hz, everything else is relative)
+    function midiToHz(midi) {
+      return 440 * Math.pow(2, (midi - 69) / 12);
+    }
+
+    // Get the note name from a MIDI number
+    function midiToName(midi) {
+      return NOTE_NAMES[midi % 12];
+    }
+
+    // ── Gesture definitions ────────────────────────────────────────────────
+    // [thumb, index, middle, ring, pinky] → true = up, false = down
+    // Each gesture also defines which mode and scale to use
+    const GESTURES = [
+      { name: 'major',      mode: 'robot', match: [true,  true,  true,  true,  true ] },
+      { name: 'minor',      mode: 'choir', match: [true,  false, false, false, true ] },
+      { name: 'pentatonic', mode: 'robot', match: [false, true,  false, false, false] },
+      { name: 'chromatic',  mode: 'choir', match: [false, true,  true,  false, false] },
+      { name: 'bypass',     mode: 'none',  match: [false, false, false, false, false] },
+    ];
+
+    // ── Map hand height + scale to a pitch ────────────────────────────────
+    // wristY is 0 (top of frame) to 1 (bottom of frame)
+    // We invert it so raising your hand = higher pitch
+    function getPitchFromHand(wristY, scaleName) {
+      if (!scaleName || scaleName === 'bypass') return null;
+
+      const intervals = SCALES[scaleName];
+
+      // Build the full list of MIDI notes for this scale across NUM_OCTAVES
+      const notes = [];
+      for (let oct = 0; oct < NUM_OCTAVES; oct++) {
+        intervals.forEach(interval => {
+          notes.push(ROOT_MIDI + oct * 12 + interval);
+        });
+      }
+
+      // Invert wristY: 0 = top = high pitch, 1 = bottom = low pitch
+      const t = 1 - wristY;   // t goes 0 (hand low) → 1 (hand high)
+
+      // Map t to an index in the notes array
+      const index = Math.round(t * (notes.length - 1));
+      const midi  = notes[Math.max(0, Math.min(index, notes.length - 1))];
+
+      return { hz: midiToHz(midi), name: midiToName(midi), midi };
+    }
+
+    // ── Vocoder setup ──────────────────────────────────────────────────────
     const NUM_BANDS  = 16;
     const MIN_FREQ   = 80;
     const MAX_FREQ   = 8000;
-    const CARRIER_HZ = 120;
 
     let audioContext     = null;
     let analyser         = null;
     let dataArray        = null;
-    let mode             = 'robot';
+    let currentMode      = 'robot';
     let micStream        = null;
+    let micNode          = null;
     let modulatorFilters = [];
     let carrierFilters   = [];
     let envelopes        = [];
     let carrierGains     = [];
     let oscillators      = [];
     let envelopeBuffers  = [];
+    let masterGain       = null;   // NEW: master gain for bypass
 
-    // ── Hand tracking state ────────────────────────────────────────────────
-    // This object holds the current state of the hand, updated every frame
-    let handState = {
-      detected: false,
-      fingers: {
-        thumb:  false,
-        index:  false,
-        middle: false,
-        ring:   false,
-        pinky:  false,
-      },
-      wristY: 0.5,    // 0 = top of frame, 1 = bottom
-      scale: 'none',
-    };
-
-    // ── Scale / gesture map ────────────────────────────────────────────────
-    // Each gesture is defined by which fingers are up (true) or down (false)
-    // Order: [thumb, index, middle, ring, pinky]
-    const GESTURES = [
-      {
-        name: 'major',
-        // All fingers up — open hand
-        match: [true, true, true, true, true],
-      },
-      {
-        name: 'minor',
-        // Pinky + thumb only — hang loose shape
-        match: [true, false, false, false, true],
-      },
-      {
-        name: 'pentatonic',
-        // Index only
-        match: [false, true, false, false, false],
-      },
-      {
-        name: 'chromatic',
-        // Index + middle — peace sign
-        match: [false, true, true, false, false],
-      },
-      {
-        name: 'bypass',
-        // Fist — all down
-        match: [false, false, false, false, false],
-      },
-    ];
-
-    // ── Detect which fingers are extended ─────────────────────────────────
-    // landmarks is the array of 21 points from MediaPipe
-    // Each point has .x and .y, normalised 0–1 within the video frame
-    function detectFingers(landmarks) {
-
-      // Tip and pip (knuckle) landmark indices for each finger
-      // If tip.y < pip.y, the finger is pointing up (remember: y=0 is top)
-      const fingers = {
-        // Thumb is special — we compare x positions since it moves sideways
-        // tip=4, ip=3 (the joint below the tip)
-        thumb:  landmarks[4].x < landmarks[3].x,
-
-        // For the other four: tip y < pip y means extended
-        index:  landmarks[8].y  < landmarks[6].y,
-        middle: landmarks[12].y < landmarks[10].y,
-        ring:   landmarks[16].y < landmarks[14].y,
-        pinky:  landmarks[20].y < landmarks[18].y,
-      };
-
-      return fingers;
-    }
-
-    // ── Match finger state to a gesture ───────────────────────────────────
-    function matchGesture(fingers) {
-      const state = [
-        fingers.thumb,
-        fingers.index,
-        fingers.middle,
-        fingers.ring,
-        fingers.pinky,
-      ];
-
-      for (const gesture of GESTURES) {
-        // Check if every finger matches this gesture's pattern
-        const matches = gesture.match.every((expected, i) => expected === state[i]);
-        if (matches) return gesture.name;
-      }
-
-      return 'none';   // no gesture matched
-    }
-
-    // ── Draw hand landmarks on the hand canvas ────────────────────────────
-    function drawHand(landmarks) {
-      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
-      // The connections between landmarks (which points to draw lines between)
-      // These are the "bones" of the hand skeleton
-      const connections = [
-        [0,1],[1,2],[2,3],[3,4],         // thumb
-        [0,5],[5,6],[6,7],[7,8],         // index
-        [0,9],[9,10],[10,11],[11,12],    // middle
-        [0,13],[13,14],[14,15],[15,16],  // ring
-        [0,17],[17,18],[18,19],[19,20],  // pinky
-        [5,9],[9,13],[13,17],            // palm knuckles
-      ];
-
-      // Scale landmark coordinates (0–1) to canvas pixel coordinates
-      // Note: we mirror x (1 - x) so it feels like looking in a mirror
-      const toCanvas = (lm) => ({
-        x: (1 - lm.x) * handCanvas.width,
-        y: lm.y * handCanvas.height,
-      });
-
-      // Draw bones (lines between joints)
-      handCtx.strokeStyle = '#333366';
-      handCtx.lineWidth   = 2;
-      connections.forEach(([a, b]) => {
-        const pa = toCanvas(landmarks[a]);
-        const pb = toCanvas(landmarks[b]);
-        handCtx.beginPath();
-        handCtx.moveTo(pa.x, pa.y);
-        handCtx.lineTo(pb.x, pb.y);
-        handCtx.stroke();
-      });
-
-      // Draw joints (dots at each landmark)
-      landmarks.forEach((lm, i) => {
-        const p = toCanvas(lm);
-
-        // Fingertips (4, 8, 12, 16, 20) glow brighter
-        const isTip = [4, 8, 12, 16, 20].includes(i);
-
-        handCtx.beginPath();
-        handCtx.arc(p.x, p.y, isTip ? 5 : 3, 0, Math.PI * 2);
-        handCtx.fillStyle = isTip ? '#8888ff' : '#4455aa';
-        handCtx.fill();
-      });
-    }
-
-    // ── Update the gesture panel UI ────────────────────────────────────────
-    function updateGestureUI(fingers, gestureName, wristY) {
-      // Update each finger indicator
-      Object.entries(fingers).forEach(([name, isUp]) => {
-        const el = fingerIndicators[name];
-        if (isUp) {
-          el.classList.add('up');
-        } else {
-          el.classList.remove('up');
-        }
-      });
-
-      document.getElementById('scaleDisplay').textContent =
-        `scale: ${gestureName}`;
-
-      // Convert wristY (0=top, 1=bottom) to a pitch description
-      const pitchPercent = Math.round((1 - wristY) * 100);
-      document.getElementById('pitchDisplay').textContent =
-        `hand height: ${pitchPercent}%`;
-    }
-
-    // ── MediaPipe Hands setup ──────────────────────────────────────────────
-    function setupHandTracking() {
-
-      const hands = new Hands({
-        locateFile: (file) => {
-          // Tell MediaPipe where to load its model files from
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }
-      });
-
-      hands.setOptions({
-        maxNumHands: 1,           // we only care about one hand
-        modelComplexity: 1,       // 0=fast/rough, 1=slower/accurate
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence:  0.5,
-      });
-
-      // This callback fires every time MediaPipe processes a frame
-      hands.onResults((results) => {
-
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-          const landmarks = results.multiHandLandmarks[0];
-
-          // Detect finger states
-          const fingers    = detectFingers(landmarks);
-          const gestureName = matchGesture(fingers);
-          const wristY     = landmarks[0].y;
-
-          // Update shared hand state
-          handState.detected = true;
-          handState.fingers  = fingers;
-          handState.wristY   = wristY;
-          handState.scale    = gestureName;
-
-          // Draw the skeleton
-          drawHand(landmarks);
-
-          // Update the info panel
-          updateGestureUI(fingers, gestureName, wristY);
-
-        } else {
-          // No hand detected — clear the canvas
-          handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-          handState.detected = false;
-        }
-      });
-
-      // Camera utility: feeds webcam frames into MediaPipe automatically
-      const camera = new Camera(video, {
-        onFrame: async () => {
-          await hands.send({ image: video });
-        },
-        width: 640,
-        height: 480,
-      });
-
-      camera.start();
-    }
-
-    // ── All the vocoder functions from phase 2 (unchanged) ────────────────
     function getBandFrequencies() {
       const bands = [];
       for (let i = 0; i < NUM_BANDS; i++) {
@@ -436,13 +354,13 @@
       oscillators.forEach(o => { try { o.stop(); } catch(e) {} });
       oscillators = [];
 
-      if (mode === 'robot') {
+      if (currentMode === 'robot') {
         const osc = audioContext.createOscillator();
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(frequency, audioContext.currentTime);
         osc.start();
         oscillators.push(osc);
-      } else {
+      } else if (currentMode === 'choir') {
         [-15, -5, 5, 15].forEach(cents => {
           const osc = audioContext.createOscillator();
           osc.type = 'sine';
@@ -456,10 +374,14 @@
       return oscillators;
     }
 
-    function buildVocoder(micNode, frequency) {
-      const bands        = getBandFrequencies();
-      const outputMerger = audioContext.createGain();
-      outputMerger.gain.value = 0.7;
+    function buildVocoder(frequency) {
+      const bands = getBandFrequencies();
+
+      // Master gain — we'll set this to 0 for bypass
+      masterGain = audioContext.createGain();
+      masterGain.gain.value = 0.7;
+      masterGain.connect(audioContext.destination);
+
       const oscs = createOscillators(frequency);
 
       modulatorFilters = [];
@@ -495,7 +417,7 @@
 
         oscs.forEach(osc => osc.connect(carFilter));
         carFilter.connect(carrierGain);
-        carrierGain.connect(outputMerger);
+        carrierGain.connect(masterGain);
 
         modulatorFilters.push(modFilter);
         carrierFilters.push(carFilter);
@@ -507,8 +429,6 @@
         envFilter.connect(reader);
         envelopeBuffers.push({ reader, buffer: new Float32Array(reader.fftSize) });
       });
-
-      outputMerger.connect(audioContext.destination);
     }
 
     function updateEnvelopes() {
@@ -525,19 +445,213 @@
       });
     }
 
+    // Smoothly update all oscillator frequencies
+    function setCarrierPitch(hz) {
+      oscillators.forEach(osc => {
+        osc.frequency.setTargetAtTime(hz, audioContext.currentTime, 0.05);
+      });
+    }
+
+    // ── Hand state ─────────────────────────────────────────────────────────
+    let handState = {
+      detected:  false,
+      fingers:   { thumb: false, index: false, middle: false, ring: false, pinky: false },
+      wristY:    0.5,
+      gesture:   null,
+    };
+
+    // The current gesture — we track this to know when it changes
+    // so we only rebuild the vocoder when the mode actually switches
+    let lastGestureName = null;
+    let lastMode        = null;
+
+    function detectFingers(landmarks) {
+      return {
+        thumb:  landmarks[4].x  < landmarks[3].x,
+        index:  landmarks[8].y  < landmarks[6].y,
+        middle: landmarks[12].y < landmarks[10].y,
+        ring:   landmarks[16].y < landmarks[14].y,
+        pinky:  landmarks[20].y < landmarks[18].y,
+      };
+    }
+
+    function matchGesture(fingers) {
+      const state = [fingers.thumb, fingers.index, fingers.middle, fingers.ring, fingers.pinky];
+      for (const g of GESTURES) {
+        if (g.match.every((expected, i) => expected === state[i])) return g;
+      }
+      return null;
+    }
+
+    // ── Main hand → audio update (runs every frame) ────────────────────────
+    function applyHandToAudio() {
+      if (!handState.detected || !masterGain) return;
+
+      const gesture = handState.gesture;
+
+      // ── Bypass (fist) ──────────────────────────────────────────────────
+      if (!gesture || gesture.name === 'bypass') {
+        masterGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
+        updateUI({ mode: 'bypass', scale: 'bypass', note: null, hz: null, wristY: handState.wristY, fingers: handState.fingers });
+        return;
+      }
+
+      // ── Switch mode if gesture changed ────────────────────────────────
+      if (gesture.name !== lastGestureName || gesture.mode !== lastMode) {
+        lastGestureName = gesture.name;
+        lastMode        = gesture.mode;
+        currentMode     = gesture.mode;
+
+        // Rebuild oscillators for the new mode (keeps filters, just swaps oscs)
+        const currentHz = handState.currentHz || 130;
+        oscillators.forEach(o => { try { o.stop(); } catch(e) {} });
+        oscillators = [];
+        createOscillators(currentHz);
+
+        // Reconnect new oscillators through existing carrier filters
+        oscillators.forEach(osc => {
+          carrierFilters.forEach(cf => osc.connect(cf));
+        });
+      }
+
+      // ── Unmute ────────────────────────────────────────────────────────
+      masterGain.gain.setTargetAtTime(0.7, audioContext.currentTime, 0.05);
+
+      // ── Pitch from hand height ─────────────────────────────────────────
+      const pitch = getPitchFromHand(handState.wristY, gesture.name);
+      if (pitch) {
+        setCarrierPitch(pitch.hz);
+        handState.currentHz = pitch.hz;
+      }
+
+      updateUI({
+        mode:    gesture.mode,
+        scale:   gesture.name,
+        note:    pitch ? pitch.name : null,
+        hz:      pitch ? pitch.hz   : null,
+        wristY:  handState.wristY,
+        fingers: handState.fingers,
+      });
+    }
+
+    // ── Update the UI display ──────────────────────────────────────────────
+    function updateUI({ mode, scale, note, hz, wristY, fingers }) {
+      // Big mode label
+      modeDisplay.textContent = mode === 'bypass' ? 'SILENCE' : mode.toUpperCase();
+      modeDisplay.className   = mode;
+
+      // Scale + note
+      scaleLabel.textContent  = `scale: ${scale}`;
+      noteDisplay.textContent = note || '—';
+      pitchHzEl.textContent   = hz ? `${Math.round(hz)} hz` : '—';
+
+      // Finger indicators
+      ['thumb','index','middle','ring','pinky'].forEach(name => {
+        const el = document.getElementById(`fi-${name}`);
+        fingers[name] ? el.classList.add('up') : el.classList.remove('up');
+      });
+
+      // Pitch bar — shows hand height as a horizontal bar
+      const pct = Math.round((1 - wristY) * 100);
+      pitchBar.style.width      = `${pct}%`;
+      pitchBar.style.background = mode === 'choir' ? '#5588ff' : '#5555ff';
+    }
+
+    // ── Draw hand skeleton ─────────────────────────────────────────────────
+    function drawHand(landmarks) {
+      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+      const connections = [
+        [0,1],[1,2],[2,3],[3,4],
+        [0,5],[5,6],[6,7],[7,8],
+        [0,9],[9,10],[10,11],[11,12],
+        [0,13],[13,14],[14,15],[15,16],
+        [0,17],[17,18],[18,19],[19,20],
+        [5,9],[9,13],[13,17],
+      ];
+
+      const toCanvas = lm => ({
+        x: (1 - lm.x) * handCanvas.width,
+        y: lm.y * handCanvas.height,
+      });
+
+      handCtx.strokeStyle = '#333366';
+      handCtx.lineWidth   = 2;
+      connections.forEach(([a, b]) => {
+        const pa = toCanvas(landmarks[a]);
+        const pb = toCanvas(landmarks[b]);
+        handCtx.beginPath();
+        handCtx.moveTo(pa.x, pa.y);
+        handCtx.lineTo(pb.x, pb.y);
+        handCtx.stroke();
+      });
+
+      landmarks.forEach((lm, i) => {
+        const p      = toCanvas(lm);
+        const isTip  = [4,8,12,16,20].includes(i);
+        handCtx.beginPath();
+        handCtx.arc(p.x, p.y, isTip ? 5 : 3, 0, Math.PI * 2);
+        handCtx.fillStyle = isTip ? '#8888ff' : '#4455aa';
+        handCtx.fill();
+      });
+    }
+
+    // ── MediaPipe setup ────────────────────────────────────────────────────
+    function setupHandTracking() {
+      const hands = new Hands({
+        locateFile: file =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence:  0.5,
+      });
+
+      hands.onResults(results => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+          const landmarks = results.multiHandLandmarks[0];
+          const fingers   = detectFingers(landmarks);
+          const gesture   = matchGesture(fingers);
+
+          handState.detected = true;
+          handState.fingers  = fingers;
+          handState.wristY   = landmarks[0].y;
+          handState.gesture  = gesture;
+
+          drawHand(landmarks);
+        } else {
+          handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+          handState.detected = false;
+        }
+      });
+
+      const camera = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }); },
+        width: 640,
+        height: 480,
+      });
+
+      camera.start();
+    }
+
     // ── Draw loop ──────────────────────────────────────────────────────────
     function drawLoop() {
       requestAnimationFrame(drawLoop);
 
       if (envelopeBuffers.length > 0) updateEnvelopes();
 
-      analyser.getByteTimeDomainData(dataArray);
+      // Apply hand tracking to audio every frame
+      if (handState.detected) applyHandToAudio();
 
+      // Waveform
+      analyser.getByteTimeDomainData(dataArray);
       waveCtx.fillStyle = '#0f0f1a';
       waveCtx.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
-
       waveCtx.lineWidth   = 2;
-      waveCtx.strokeStyle = mode === 'robot' ? '#5555ff' : '#55aaff';
+      waveCtx.strokeStyle = currentMode === 'choir' ? '#55aaff' : '#5555ff';
       waveCtx.beginPath();
 
       const sliceWidth = waveCanvas.width / dataArray.length;
@@ -552,29 +666,24 @@
       waveCtx.stroke();
     }
 
-    // ── Start button — kicks everything off ───────────────────────────────
+    // ── Start ──────────────────────────────────────────────────────────────
     startBtn.addEventListener('click', async () => {
-
-      // Audio setup
-      audioContext  = new AudioContext();
-      micStream     = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const micNode = audioContext.createMediaStreamSource(micStream);
+      audioContext = new AudioContext();
+      micStream    = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micNode      = audioContext.createMediaStreamSource(micStream);
 
       analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
       micNode.connect(analyser);
       dataArray = new Uint8Array(analyser.fftSize);
 
-      buildVocoder(micNode, CARRIER_HZ);
+      buildVocoder(130);
 
-      // Hand tracking setup
       setupHandTracking();
 
-      // Show the gesture panel
-      gesturePanel.style.display = 'block';
-
-      statusEl.textContent = 'vocoder + hand tracking active';
-      startBtn.disabled    = true;
+      perfPanel.style.display = 'block';
+      statusEl.textContent    = 'active — use headphones!';
+      startBtn.disabled       = true;
 
       drawLoop();
     });
