@@ -4,27 +4,193 @@
   <meta charset="UTF-8">
   <title>Gesture Vocoder</title>
   <style>
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       background: #0a0a0f;
       color: #e0e0ff;
       font-family: monospace;
+      min-height: 100vh;
+    }
+
+    /* ── Mobile block ───────────────────────────────────────────── */
+    #mobileBlock {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px;
+      text-align: center;
+      gap: 16px;
+    }
+
+    #mobileBlock h1 {
+      font-size: 1rem;
+      letter-spacing: 0.2em;
+      color: #8888ff;
+    }
+
+    #mobileBlock p {
+      font-size: 0.8rem;
+      color: #444466;
+      line-height: 1.8;
+    }
+
+    @media (max-width: 700px) {
+      #mobileBlock  { display: flex; }
+      #desktopApp   { display: none !important; }
+    }
+
+    /* ── Desktop app wrapper ────────────────────────────────────── */
+    #desktopApp {
       display: flex;
       flex-direction: column;
       align-items: center;
       padding: 40px;
-      margin: 0;
     }
 
-    h1 { font-size: 1.2rem; letter-spacing: 0.2em; margin-bottom: 8px; }
+    /* ── Intro screen ───────────────────────────────────────────── */
+    #introScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 640px;
+      gap: 0;
+    }
 
-    #subtitle {
-      color: #666;
+    #introScreen h1 {
+      font-size: 1.2rem;
+      letter-spacing: 0.3em;
+      margin-bottom: 8px;
+      color: #8888ff;
+    }
+
+    #introScreen .tagline {
+      font-size: 0.75rem;
+      color: #444466;
+      margin-bottom: 36px;
+    }
+
+    .intro-section {
+      width: 100%;
+      background: #0f0f1a;
+      border: 1px solid #1a1a2a;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+    }
+
+    .intro-section h2 {
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: #444466;
+      margin-bottom: 14px;
+    }
+
+    /* Headphone warning */
+    .headphone-warn {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .headphone-icon {
+      font-size: 2rem;
+      flex-shrink: 0;
+    }
+
+    .headphone-warn p {
       font-size: 0.8rem;
-      margin-bottom: 24px;
+      color: #8888aa;
+      line-height: 1.7;
     }
 
+    .headphone-warn strong {
+      color: #aaaaff;
+    }
+
+    /* Gesture grid */
+    .gesture-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .gesture-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: #0a0a14;
+      border: 1px solid #151525;
+      border-radius: 6px;
+    }
+
+    .gesture-emoji { font-size: 1.2rem; }
+
+    .gesture-text { font-size: 0.7rem; line-height: 1.5; }
+    .gesture-text .g-name { color: #8888ff; }
+    .gesture-text .g-desc { color: #444466; }
+
+    /* How to play */
+    .how-list {
+      list-style: none;
+      font-size: 0.75rem;
+      color: #555577;
+      line-height: 2;
+      counter-reset: steps;
+    }
+
+    .how-list li::before {
+      counter-increment: steps;
+      content: counter(steps) ". ";
+      color: #333355;
+    }
+
+    .how-list li span { color: #8888aa; }
+
+    /* Start button */
+    #startBtn {
+      margin-top: 8px;
+      width: 100%;
+      padding: 16px;
+      background: #1a1a3a;
+      color: #8888ff;
+      border: 1px solid #333366;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 1rem;
+      letter-spacing: 0.15em;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    #startBtn:hover { background: #22224a; }
+
+    .permissions-note {
+      font-size: 0.65rem;
+      color: #333355;
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    /* ── Performance screen ─────────────────────────────────────── */
+    #perfScreen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      width: 640px;
+    }
+
+    #perfScreen h1 {
+      font-size: 1rem;
+      letter-spacing: 0.3em;
+      color: #333355;
+      margin-bottom: 20px;
+    }
+
+    /* Stacked canvas area */
     #display-area {
       position: relative;
       width: 640px;
@@ -45,51 +211,37 @@
 
     #handCanvas { pointer-events: none; }
 
+    /* Processing indicator dot */
+    #procIndicator {
+      position: absolute;
+      top: 10px; right: 12px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #222244;
+      transition: background 0.1s;
+    }
+
+    #procIndicator.active { background: #8888ff; }
+    #procIndicator.choir  { background: #55aaff; }
+
     #video { display: none; }
 
-    button {
-      margin-top: 24px;
-      padding: 12px 32px;
-      background: #1a1a3a;
-      color: #8888ff;
-      border: 1px solid #333366;
-      border-radius: 6px;
-      font-family: monospace;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-
-    button:hover { background: #22224a; }
-
-    #status {
-      margin-top: 16px;
-      font-size: 0.75rem;
-      color: #444466;
-    }
-
-    /* ── Performance panel ── */
-    #perfPanel {
-      display: none;
-      margin-top: 20px;
-      width: 640px;
-    }
-
-    /* Big mode display */
+    /* Mode display */
     #modeDisplay {
-      text-align: center;
       font-size: 2rem;
       letter-spacing: 0.2em;
       color: #8888ff;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       min-height: 2.5rem;
       transition: color 0.2s;
+      text-align: center;
     }
 
-    #modeDisplay.bypass { color: #333355; }
+    #modeDisplay.bypass { color: #222244; }
     #modeDisplay.choir  { color: #55aaff; }
-    #modeDisplay.robot  { color: #8888ff; }
+    #modeDisplay.none   { color: #1a1a2a; }
 
-    /* Scale + note row */
+    /* Info row */
     #infoRow {
       display: flex;
       justify-content: space-between;
@@ -98,30 +250,20 @@
       background: #0f0f1a;
       border: 1px solid #222244;
       border-radius: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+      width: 100%;
     }
 
-    #scaleLabel {
-      font-size: 0.75rem;
-      color: #555577;
-    }
+    #scaleLabel { font-size: 0.75rem; color: #555577; }
+    #noteDisplay { font-size: 1.4rem; color: #aaaaff; letter-spacing: 0.1em; }
+    #pitchHz { font-size: 0.75rem; color: #555577; }
 
-    #noteDisplay {
-      font-size: 1.4rem;
-      color: #aaaaff;
-      letter-spacing: 0.1em;
-    }
-
-    #pitchHz {
-      font-size: 0.75rem;
-      color: #555577;
-    }
-
-    /* Finger indicators */
+    /* Finger row */
     #fingerRow {
       display: flex;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+      width: 100%;
     }
 
     .fi {
@@ -147,8 +289,10 @@
       background: #0f0f1a;
       border: 1px solid #222244;
       border-radius: 8px;
-      height: 12px;
+      height: 10px;
       overflow: hidden;
+      width: 100%;
+      margin-bottom: 16px;
     }
 
     #pitchBar {
@@ -159,64 +303,190 @@
       transition: width 0.05s, background 0.2s;
     }
 
-    /* Gesture reference */
-    #gestureRef {
-      margin-top: 16px;
-      padding: 14px 20px;
-      background: #0a0a12;
-      border: 1px solid #1a1a2a;
-      border-radius: 8px;
+    /* Smoothing slider */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      margin-bottom: 16px;
       font-size: 0.7rem;
       color: #333355;
-      line-height: 2;
     }
 
-    #gestureRef span { color: #555577; }
+    .slider-row input { flex: 1; }
+    .slider-row span  { min-width: 60px; color: #555577; }
+
+    /* Gesture cheat sheet (collapsed, always visible at bottom) */
+    #cheatSheet {
+      width: 100%;
+      padding: 12px 16px;
+      background: #0a0a12;
+      border: 1px solid #151520;
+      border-radius: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+
+    .cs-item {
+      font-size: 0.65rem;
+      color: #333355;
+      line-height: 1.6;
+    }
+
+    .cs-item .cs-gesture { color: #444466; }
   </style>
 </head>
 <body>
 
-  <h1>GESTURE VOCODER</h1>
-  <div id="subtitle">phase 4 — performance</div>
-
-  <div id="display-area">
-    <canvas id="waveform" width="640" height="200"></canvas>
-    <canvas id="handCanvas" width="640" height="200"></canvas>
+  <!-- ── Mobile block ──────────────────────────────────────────────── -->
+  <div id="mobileBlock">
+    <h1>GESTURE VOCODER</h1>
+    <p>
+      This instrument uses your webcam and microphone<br>
+      and needs a desktop browser to work properly.<br><br>
+      <span style="color:#333355">Visit on a laptop or desktop to play.</span>
+    </p>
   </div>
 
-  <video id="video" width="640" height="480" autoplay playsinline></video>
+  <!-- ── Desktop app ───────────────────────────────────────────────── -->
+  <div id="desktopApp">
 
-  <button id="startBtn">Start</button>
-  <div id="status">waiting...</div>
+    <!-- INTRO SCREEN -->
+    <div id="introScreen">
 
-  <!-- Performance panel (hidden until started) -->
-  <div id="perfPanel">
+      <h1>GESTURE VOCODER</h1>
+      <div class="tagline">a hand-controlled vocal synthesiser</div>
 
-    <div id="modeDisplay">—</div>
+      <!-- Headphone warning -->
+      <div class="intro-section">
+        <h2>BEFORE YOU START</h2>
+        <div class="headphone-warn">
+          <div class="headphone-icon">🎧</div>
+          <p>
+            <strong>Wear headphones.</strong> This instrument uses your microphone.
+            Without headphones your speakers will feed back into the mic
+            and produce a loud screech. Earbuds work fine.
+          </p>
+        </div>
+      </div>
 
-    <div id="infoRow">
-      <div id="scaleLabel">scale: —</div>
-      <div id="noteDisplay">—</div>
-      <div id="pitchHz">— hz</div>
+      <!-- Gesture guide -->
+      <div class="intro-section">
+        <h2>HAND GESTURES</h2>
+        <div class="gesture-grid">
+          <div class="gesture-item">
+            <div class="gesture-emoji">✋</div>
+            <div class="gesture-text">
+              <div class="g-name">Open hand</div>
+              <div class="g-desc">Major scale · robot</div>
+            </div>
+          </div>
+          <div class="gesture-item">
+            <div class="gesture-emoji">🤙</div>
+            <div class="gesture-text">
+              <div class="g-name">Thumb + pinky</div>
+              <div class="g-desc">Minor scale · choir</div>
+            </div>
+          </div>
+          <div class="gesture-item">
+            <div class="gesture-emoji">☝️</div>
+            <div class="gesture-text">
+              <div class="g-name">Index only</div>
+              <div class="g-desc">Pentatonic · robot</div>
+            </div>
+          </div>
+          <div class="gesture-item">
+            <div class="gesture-emoji">✌️</div>
+            <div class="gesture-text">
+              <div class="g-name">Index + middle</div>
+              <div class="g-desc">Chromatic · choir</div>
+            </div>
+          </div>
+          <div class="gesture-item">
+            <div class="gesture-emoji">✊</div>
+            <div class="gesture-text">
+              <div class="g-name">Fist</div>
+              <div class="g-desc">Silence / bypass</div>
+            </div>
+          </div>
+          <div class="gesture-item">
+            <div class="gesture-emoji">↕️</div>
+            <div class="gesture-text">
+              <div class="g-name">Hand height</div>
+              <div class="g-desc">Controls pitch</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- How to play -->
+      <div class="intro-section">
+        <h2>HOW TO PLAY</h2>
+        <ol class="how-list">
+          <li>Put on headphones, then click Start</li>
+          <li>Allow microphone and camera permissions</li>
+          <li><span>Hum or sing</span> into the mic — vowels work best</li>
+          <li>Hold your hand up in front of the webcam</li>
+          <li>Move your hand <span>up and down</span> to change pitch</li>
+          <li>Change finger shapes to <span>switch scales and modes</span></li>
+        </ol>
+      </div>
+
+      <button id="startBtn">START INSTRUMENT</button>
+      <div class="permissions-note">will request microphone + camera access</div>
+
     </div>
 
-    <div id="fingerRow">
-      <div class="fi" id="fi-thumb">thumb</div>
-      <div class="fi" id="fi-index">index</div>
-      <div class="fi" id="fi-middle">middle</div>
-      <div class="fi" id="fi-ring">ring</div>
-      <div class="fi" id="fi-pinky">pinky</div>
-    </div>
+    <!-- PERFORMANCE SCREEN -->
+    <div id="perfScreen">
 
-    <div id="pitchBarWrap"><div id="pitchBar"></div></div>
+      <h1>GESTURE VOCODER</h1>
 
-    <div id="gestureRef">
-      <span>✋ all fingers</span> → major scale (robot) &nbsp;|&nbsp;
-      <span>🤙 thumb + pinky</span> → minor scale (choir)<br>
-      <span>☝️ index only</span> → pentatonic (robot) &nbsp;|&nbsp;
-      <span>✌️ index + middle</span> → chromatic (choir)<br>
-      <span>✊ fist</span> → silence &nbsp;|&nbsp;
-      <span>↕️ hand height</span> → pitch
+      <div id="display-area">
+        <canvas id="waveform" width="640" height="200"></canvas>
+        <canvas id="handCanvas" width="640" height="200"></canvas>
+        <div id="procIndicator"></div>
+      </div>
+
+      <video id="video" width="640" height="480" autoplay playsinline></video>
+
+      <div id="modeDisplay" class="none">—</div>
+
+      <div id="infoRow">
+        <div id="scaleLabel">scale: —</div>
+        <div id="noteDisplay">—</div>
+        <div id="pitchHz">— hz</div>
+      </div>
+
+      <div id="fingerRow">
+        <div class="fi" id="fi-thumb">thumb</div>
+        <div class="fi" id="fi-index">index</div>
+        <div class="fi" id="fi-middle">middle</div>
+        <div class="fi" id="fi-ring">ring</div>
+        <div class="fi" id="fi-pinky">pinky</div>
+      </div>
+
+      <div id="pitchBarWrap"><div id="pitchBar"></div></div>
+
+      <!-- Pitch smoothing slider -->
+      <div class="slider-row">
+        <label for="smoothSlider">pitch smoothing</label>
+        <input type="range" id="smoothSlider" min="0.01" max="0.3" step="0.01" value="0.05">
+        <span id="smoothLabel">medium</span>
+      </div>
+
+      <!-- Cheat sheet -->
+      <div id="cheatSheet">
+        <div class="cs-item"><span class="cs-gesture">✋ open</span><br>major · robot</div>
+        <div class="cs-item"><span class="cs-gesture">🤙 thumb+pinky</span><br>minor · choir</div>
+        <div class="cs-item"><span class="cs-gesture">☝️ index</span><br>pentatonic · robot</div>
+        <div class="cs-item"><span class="cs-gesture">✌️ index+middle</span><br>chromatic · choir</div>
+        <div class="cs-item"><span class="cs-gesture">✊ fist</span><br>silence</div>
+        <div class="cs-item"><span class="cs-gesture">↕️ height</span><br>pitch</div>
+      </div>
+
     </div>
 
   </div>
@@ -227,55 +497,47 @@
 
   <script>
 
-    // ── Element refs ───────────────────────────────────────────────────────
-    const waveCanvas  = document.getElementById('waveform');
-    const waveCtx     = waveCanvas.getContext('2d');
-    const handCanvas  = document.getElementById('handCanvas');
-    const handCtx     = handCanvas.getContext('2d');
-    const video       = document.getElementById('video');
-    const startBtn    = document.getElementById('startBtn');
-    const statusEl    = document.getElementById('status');
-    const perfPanel   = document.getElementById('perfPanel');
-    const modeDisplay = document.getElementById('modeDisplay');
-    const scaleLabel  = document.getElementById('scaleLabel');
-    const noteDisplay = document.getElementById('noteDisplay');
-    const pitchHzEl   = document.getElementById('pitchHz');
-    const pitchBar    = document.getElementById('pitchBar');
+    // ── Element refs ───────────────────────────────────────────────
+    const waveCanvas   = document.getElementById('waveform');
+    const waveCtx      = waveCanvas.getContext('2d');
+    const handCanvas   = document.getElementById('handCanvas');
+    const handCtx      = handCanvas.getContext('2d');
+    const video        = document.getElementById('video');
+    const startBtn     = document.getElementById('startBtn');
+    const introScreen  = document.getElementById('introScreen');
+    const perfScreen   = document.getElementById('perfScreen');
+    const modeDisplay  = document.getElementById('modeDisplay');
+    const scaleLabel   = document.getElementById('scaleLabel');
+    const noteDisplay  = document.getElementById('noteDisplay');
+    const pitchHzEl    = document.getElementById('pitchHz');
+    const pitchBar     = document.getElementById('pitchBar');
+    const procDot      = document.getElementById('procIndicator');
+    const smoothSlider = document.getElementById('smoothSlider');
+    const smoothLabel  = document.getElementById('smoothLabel');
 
-    // ── Music theory data ──────────────────────────────────────────────────
-    // Scales defined as semitone intervals from the root note
-    // We'll use these to snap hand height to musical pitches
+    // ── Smoothing slider label ─────────────────────────────────────
+    smoothSlider.addEventListener('input', () => {
+      const v = parseFloat(smoothSlider.value);
+      smoothLabel.textContent = v < 0.05 ? 'snappy' : v < 0.15 ? 'medium' : 'gliding';
+    });
+
+    // ── Music theory ───────────────────────────────────────────────
     const SCALES = {
       major:      [0, 2, 4, 5, 7, 9, 11],
       minor:      [0, 2, 3, 5, 7, 8, 10],
       pentatonic: [0, 2, 4, 7, 9],
-      chromatic:  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      chromatic:  [0,1,2,3,4,5,6,7,8,9,10,11],
       bypass:     null,
     };
 
-    // Note names for display
-    const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-
-    // Root note: C3 = MIDI note 48 = ~130.8 Hz
-    // We'll span 2 octaves upward from here
-    const ROOT_MIDI   = 48;
+    const NOTE_NAMES  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const ROOT_MIDI   = 48;   // C3
     const NUM_OCTAVES = 2;
 
-    // Convert a MIDI note number to frequency in Hz
-    // Formula: 440 * 2^((midi - 69) / 12)
-    // (A4 = MIDI 69 = 440 Hz, everything else is relative)
-    function midiToHz(midi) {
-      return 440 * Math.pow(2, (midi - 69) / 12);
-    }
+    function midiToHz(midi)  { return 440 * Math.pow(2, (midi - 69) / 12); }
+    function midiToName(midi){ return NOTE_NAMES[midi % 12]; }
 
-    // Get the note name from a MIDI number
-    function midiToName(midi) {
-      return NOTE_NAMES[midi % 12];
-    }
-
-    // ── Gesture definitions ────────────────────────────────────────────────
-    // [thumb, index, middle, ring, pinky] → true = up, false = down
-    // Each gesture also defines which mode and scale to use
+    // ── Gestures ───────────────────────────────────────────────────
     const GESTURES = [
       { name: 'major',      mode: 'robot', match: [true,  true,  true,  true,  true ] },
       { name: 'minor',      mode: 'choir', match: [true,  false, false, false, true ] },
@@ -284,33 +546,21 @@
       { name: 'bypass',     mode: 'none',  match: [false, false, false, false, false] },
     ];
 
-    // ── Map hand height + scale to a pitch ────────────────────────────────
-    // wristY is 0 (top of frame) to 1 (bottom of frame)
-    // We invert it so raising your hand = higher pitch
+    // ── Pitch calculation ──────────────────────────────────────────
     function getPitchFromHand(wristY, scaleName) {
       if (!scaleName || scaleName === 'bypass') return null;
-
       const intervals = SCALES[scaleName];
-
-      // Build the full list of MIDI notes for this scale across NUM_OCTAVES
       const notes = [];
       for (let oct = 0; oct < NUM_OCTAVES; oct++) {
-        intervals.forEach(interval => {
-          notes.push(ROOT_MIDI + oct * 12 + interval);
-        });
+        intervals.forEach(interval => notes.push(ROOT_MIDI + oct * 12 + interval));
       }
-
-      // Invert wristY: 0 = top = high pitch, 1 = bottom = low pitch
-      const t = 1 - wristY;   // t goes 0 (hand low) → 1 (hand high)
-
-      // Map t to an index in the notes array
+      const t     = 1 - wristY;
       const index = Math.round(t * (notes.length - 1));
       const midi  = notes[Math.max(0, Math.min(index, notes.length - 1))];
-
       return { hz: midiToHz(midi), name: midiToName(midi), midi };
     }
 
-    // ── Vocoder setup ──────────────────────────────────────────────────────
+    // ── Vocoder state ──────────────────────────────────────────────
     const NUM_BANDS  = 16;
     const MIN_FREQ   = 80;
     const MAX_FREQ   = 8000;
@@ -327,7 +577,8 @@
     let carrierGains     = [];
     let oscillators      = [];
     let envelopeBuffers  = [];
-    let masterGain       = null;   // NEW: master gain for bypass
+    let masterGain       = null;
+    let reverbNode       = null;
 
     function getBandFrequencies() {
       const bands = [];
@@ -348,6 +599,35 @@
         curve[i] = Math.abs(x);
       }
       return curve;
+    }
+
+    // ── Reverb — create an impulse response (the "room shape") ────
+    // A convolution reverb works by multiplying your audio against
+    // a recording of a room's echo (called an impulse response).
+    // We generate a synthetic one here — decaying random noise.
+    function createReverb() {
+      const sampleRate = audioContext.sampleRate;
+      const length     = sampleRate * 2.5;   // 2.5 seconds of reverb tail
+      const impulse    = audioContext.createBuffer(2, length, sampleRate);
+
+      for (let channel = 0; channel < 2; channel++) {
+        const data = impulse.getChannelData(channel);
+        for (let i = 0; i < length; i++) {
+          // Random noise that decays exponentially over the buffer length
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
+        }
+      }
+
+      const convolver  = audioContext.createConvolver();
+      convolver.buffer = impulse;
+
+      // Wet/dry mix: blend dry (direct) signal with wet (reverb) signal
+      const dry = audioContext.createGain();
+      const wet = audioContext.createGain();
+      dry.gain.value = 0.7;
+      wet.gain.value = 0.35;   // reverb is quieter than dry signal
+
+      return { convolver, dry, wet };
     }
 
     function createOscillators(frequency) {
@@ -377,10 +657,24 @@
     function buildVocoder(frequency) {
       const bands = getBandFrequencies();
 
-      // Master gain — we'll set this to 0 for bypass
+      // ── Reverb setup ─────────────────────────────────────────────
+      // Audio chain:
+      // carrierGains → masterGain → dry → destination
+      //                           → wet → convolver → destination
+      const rev = createReverb();
+      reverbNode = rev;
+
       masterGain = audioContext.createGain();
-      masterGain.gain.value = 0.7;
-      masterGain.connect(audioContext.destination);
+      masterGain.gain.value = 0;   // start silent, hand activates it
+
+      // Dry path: direct to speakers
+      masterGain.connect(rev.dry);
+      rev.dry.connect(audioContext.destination);
+
+      // Wet path: through reverb then to speakers
+      masterGain.connect(rev.wet);
+      rev.wet.connect(rev.convolver);
+      rev.convolver.connect(audioContext.destination);
 
       const oscs = createOscillators(frequency);
 
@@ -432,42 +726,52 @@
     }
 
     function updateEnvelopes() {
+      let totalRms = 0;
+
       envelopeBuffers.forEach(({ reader, buffer }, i) => {
         reader.getFloatTimeDomainData(buffer);
         let sum = 0;
         for (let s = 0; s < buffer.length; s++) sum += buffer[s] * buffer[s];
         const rms = Math.sqrt(sum / buffer.length);
+        totalRms += rms;
+
         carrierGains[i].gain.setTargetAtTime(
           Math.min(rms * 12, 1.0),
           audioContext.currentTime,
           0.01
         );
       });
+
+      // Update processing indicator dot
+      const avgRms = totalRms / envelopeBuffers.length;
+      if (avgRms > 0.01) {
+        procDot.className = currentMode === 'choir' ? 'choir' : 'active';
+      } else {
+        procDot.className = '';
+      }
     }
 
-    // Smoothly update all oscillator frequencies
-    function setCarrierPitch(hz) {
-      oscillators.forEach(osc => {
-        osc.frequency.setTargetAtTime(hz, audioContext.currentTime, 0.05);
-      });
-    }
-
-    // ── Hand state ─────────────────────────────────────────────────────────
-    let handState = {
-      detected:  false,
-      fingers:   { thumb: false, index: false, middle: false, ring: false, pinky: false },
-      wristY:    0.5,
-      gesture:   null,
-    };
-
-    // The current gesture — we track this to know when it changes
-    // so we only rebuild the vocoder when the mode actually switches
-    let lastGestureName = null;
-    let lastMode        = null;
-
+    // ── Fixed thumb detection ──────────────────────────────────────
+    // Previous version only compared x, which breaks for right hands.
+    // Now we compare the tip to the base of the index finger (landmark 5)
+    // which works regardless of which hand or orientation.
     function detectFingers(landmarks) {
+      const thumbTip  = landmarks[4];
+      const thumbBase = landmarks[2];
+      const indexMcp  = landmarks[5];   // base of index finger
+
+      // Thumb is up if its tip is far from the index finger base
+      const thumbDist = Math.hypot(
+        thumbTip.x - indexMcp.x,
+        thumbTip.y - indexMcp.y
+      );
+      const palmSize  = Math.hypot(
+        landmarks[0].x - indexMcp.x,
+        landmarks[0].y - indexMcp.y
+      );
+
       return {
-        thumb:  landmarks[4].x  < landmarks[3].x,
+        thumb:  thumbDist > palmSize * 0.8,
         index:  landmarks[8].y  < landmarks[6].y,
         middle: landmarks[12].y < landmarks[10].y,
         ring:   landmarks[16].y < landmarks[14].y,
@@ -483,81 +787,87 @@
       return null;
     }
 
-    // ── Main hand → audio update (runs every frame) ────────────────────────
+    // ── Hand state ─────────────────────────────────────────────────
+    let handState = {
+      detected:   false,
+      fingers:    { thumb: false, index: false, middle: false, ring: false, pinky: false },
+      wristY:     0.5,
+      gesture:    null,
+      currentHz:  130,
+    };
+
+    let lastGestureName = null;
+    let lastMode        = null;
+
+    function setCarrierPitch(hz) {
+      const smoothing = parseFloat(smoothSlider.value);
+      oscillators.forEach(osc => {
+        osc.frequency.setTargetAtTime(hz, audioContext.currentTime, smoothing);
+      });
+    }
+
     function applyHandToAudio() {
       if (!handState.detected || !masterGain) return;
 
       const gesture = handState.gesture;
 
-      // ── Bypass (fist) ──────────────────────────────────────────────────
       if (!gesture || gesture.name === 'bypass') {
         masterGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.05);
-        updateUI({ mode: 'bypass', scale: 'bypass', note: null, hz: null, wristY: handState.wristY, fingers: handState.fingers });
+        updatePerfUI({ mode: 'bypass', scale: 'bypass', note: null, hz: null });
         return;
       }
 
-      // ── Switch mode if gesture changed ────────────────────────────────
+      // Rebuild oscillators only when mode changes
       if (gesture.name !== lastGestureName || gesture.mode !== lastMode) {
         lastGestureName = gesture.name;
         lastMode        = gesture.mode;
         currentMode     = gesture.mode;
 
-        // Rebuild oscillators for the new mode (keeps filters, just swaps oscs)
-        const currentHz = handState.currentHz || 130;
         oscillators.forEach(o => { try { o.stop(); } catch(e) {} });
         oscillators = [];
-        createOscillators(currentHz);
-
-        // Reconnect new oscillators through existing carrier filters
+        createOscillators(handState.currentHz);
         oscillators.forEach(osc => {
           carrierFilters.forEach(cf => osc.connect(cf));
         });
       }
 
-      // ── Unmute ────────────────────────────────────────────────────────
       masterGain.gain.setTargetAtTime(0.7, audioContext.currentTime, 0.05);
 
-      // ── Pitch from hand height ─────────────────────────────────────────
       const pitch = getPitchFromHand(handState.wristY, gesture.name);
       if (pitch) {
         setCarrierPitch(pitch.hz);
         handState.currentHz = pitch.hz;
       }
 
-      updateUI({
-        mode:    gesture.mode,
-        scale:   gesture.name,
-        note:    pitch ? pitch.name : null,
-        hz:      pitch ? pitch.hz   : null,
-        wristY:  handState.wristY,
-        fingers: handState.fingers,
+      updatePerfUI({
+        mode:  gesture.mode,
+        scale: gesture.name,
+        note:  pitch ? pitch.name : null,
+        hz:    pitch ? pitch.hz   : null,
       });
     }
 
-    // ── Update the UI display ──────────────────────────────────────────────
-    function updateUI({ mode, scale, note, hz, wristY, fingers }) {
-      // Big mode label
-      modeDisplay.textContent = mode === 'bypass' ? 'SILENCE' : mode.toUpperCase();
+    function updatePerfUI({ mode, scale, note, hz }) {
+      modeDisplay.textContent = mode === 'bypass' ? 'SILENCE'
+                              : mode === 'none'   ? '—'
+                              : mode.toUpperCase();
       modeDisplay.className   = mode;
 
-      // Scale + note
-      scaleLabel.textContent  = `scale: ${scale}`;
+      scaleLabel.textContent  = `scale: ${scale || '—'}`;
       noteDisplay.textContent = note || '—';
-      pitchHzEl.textContent   = hz ? `${Math.round(hz)} hz` : '—';
+      pitchHzEl.textContent   = hz ? `${Math.round(hz)} hz` : '— hz';
 
-      // Finger indicators
       ['thumb','index','middle','ring','pinky'].forEach(name => {
         const el = document.getElementById(`fi-${name}`);
-        fingers[name] ? el.classList.add('up') : el.classList.remove('up');
+        handState.fingers[name] ? el.classList.add('up') : el.classList.remove('up');
       });
 
-      // Pitch bar — shows hand height as a horizontal bar
-      const pct = Math.round((1 - wristY) * 100);
+      const pct = Math.round((1 - handState.wristY) * 100);
       pitchBar.style.width      = `${pct}%`;
       pitchBar.style.background = mode === 'choir' ? '#5588ff' : '#5555ff';
     }
 
-    // ── Draw hand skeleton ─────────────────────────────────────────────────
+    // ── Draw hand skeleton ─────────────────────────────────────────
     function drawHand(landmarks) {
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
 
@@ -587,8 +897,8 @@
       });
 
       landmarks.forEach((lm, i) => {
-        const p      = toCanvas(lm);
-        const isTip  = [4,8,12,16,20].includes(i);
+        const p     = toCanvas(lm);
+        const isTip = [4,8,12,16,20].includes(i);
         handCtx.beginPath();
         handCtx.arc(p.x, p.y, isTip ? 5 : 3, 0, Math.PI * 2);
         handCtx.fillStyle = isTip ? '#8888ff' : '#4455aa';
@@ -596,7 +906,7 @@
       });
     }
 
-    // ── MediaPipe setup ────────────────────────────────────────────────────
+    // ── MediaPipe ──────────────────────────────────────────────────
     function setupHandTracking() {
       const hands = new Hands({
         locateFile: file =>
@@ -637,16 +947,13 @@
       camera.start();
     }
 
-    // ── Draw loop ──────────────────────────────────────────────────────────
+    // ── Draw loop ──────────────────────────────────────────────────
     function drawLoop() {
       requestAnimationFrame(drawLoop);
 
       if (envelopeBuffers.length > 0) updateEnvelopes();
+      if (handState.detected)         applyHandToAudio();
 
-      // Apply hand tracking to audio every frame
-      if (handState.detected) applyHandToAudio();
-
-      // Waveform
       analyser.getByteTimeDomainData(dataArray);
       waveCtx.fillStyle = '#0f0f1a';
       waveCtx.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
@@ -666,7 +973,7 @@
       waveCtx.stroke();
     }
 
-    // ── Start ──────────────────────────────────────────────────────────────
+    // ── Start ──────────────────────────────────────────────────────
     startBtn.addEventListener('click', async () => {
       audioContext = new AudioContext();
       micStream    = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -678,12 +985,11 @@
       dataArray = new Uint8Array(analyser.fftSize);
 
       buildVocoder(130);
-
       setupHandTracking();
 
-      perfPanel.style.display = 'block';
-      statusEl.textContent    = 'active — use headphones!';
-      startBtn.disabled       = true;
+      // Swap screens
+      introScreen.style.display = 'none';
+      perfScreen.style.display  = 'flex';
 
       drawLoop();
     });
